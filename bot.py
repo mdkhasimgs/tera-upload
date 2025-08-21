@@ -19,10 +19,10 @@ from telegram.ext import (
 # ---------------- CONFIG ----------------
 # Use environment variables in production. Avoid hardcoding tokens.
 BOT_TOKEN ="8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-MAIN_BOT_USERNAME = os.getenv("MAIN_BOT_USERNAME", "TERA_CLOUDBOT")
-UPLOAD_CHANNEL = os.getenv("UPLOAD_CHANNEL", "@terabo_storessu")
-BASE_URL = os.getenv("WEBHOOK_URL", "https://your-service.onrender.com")  # without trailing /webhook
+ADMIN_ID = "7598595878"
+MAIN_BOT_USERNAME = "TERA_CLOUDBOT"
+UPLOAD_CHANNEL ="@terabo_storessu"
+BASE_URL ="https://tera-upload.onrender.com/"  # without trailing /webhook
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
@@ -224,4 +224,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
