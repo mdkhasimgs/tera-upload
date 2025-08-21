@@ -4,7 +4,6 @@ import asyncio
 import secrets
 import re
 import os
-import json
 import threading
 
 import firebase_admin
@@ -77,7 +76,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "uptime":
         ist_time, elapsed = format_uptime()
-        # Count videos
         total_videos = db.collection("posts").where("file.media_type", "==", "video").stream()
         total_videos_count = sum(1 for _ in total_videos)
         await query.edit_message_text(
@@ -208,7 +206,7 @@ def home():
     return "Bot is running with polling!"
 
 # ---------------- BOT STARTUP ----------------
-def run_bot():
+async def run_bot():
     global db
     db = init_firebase()
     application = Application.builder().token(BOT_TOKEN).build()
@@ -223,7 +221,6 @@ def run_bot():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(conv_handler)
@@ -235,12 +232,12 @@ def run_bot():
     )
 
     logger.info("Bot started with polling...")
-    application.run_polling()
+    await application.run_polling()
 
 def main():
-    # Run bot in background thread
-    threading.Thread(target=run_bot, daemon=True).start()
-    # Start Flask (to keep Render alive)
+    # Run the bot in a background thread
+    threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True).start()
+    # Start Flask (Render keeps alive)
     app.run(host="0.0.0.0", port=5000)
 
 if __name__ == "__main__":
