@@ -17,27 +17,20 @@ from telegram.ext import (
 )
 
 # ---------------- CONFIG ----------------
-# Use environment variables in production. Avoid hardcoding tokens.
-BOT_TOKEN ="8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
-ADMIN_ID = "7598595878"
+BOT_TOKEN = "8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
+ADMIN_ID = 7598595878   # must be int, not string
 MAIN_BOT_USERNAME = "TERA_CLOUDBOT"
-UPLOAD_CHANNEL ="@terabo_storessu"
-BASE_URL ="https://tera-upload.onrender.com/"  # without trailing /webhook
+UPLOAD_CHANNEL = "@terabo_storessu"
+BASE_URL = "https://tera-upload.onrender.com"  # without trailing /
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
 # ---------------- FIREBASE INIT ----------------
 def init_firebase():
     """
-    Prefer FIREBASE_KEY env (JSON string). Fallback to local serviceAccountKey.json.
+    Use local serviceAccountKey.json (since no ENV).
     """
-    firebase_key = os.getenv("FIREBASE_KEY")
-    if firebase_key:
-        # Render env var may be multiline or single-line JSON
-        cred_dict = json.loads(firebase_key)
-        cred = credentials.Certificate(cred_dict)
-    else:
-        cred = credentials.Certificate("serviceAccountKey.json")
+    cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
     return firestore.client()
 
@@ -152,7 +145,6 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "views": 0
     })
 
-    # Try to archive to channel (optional)
     try:
         if media_type == "photo":
             await context.bot.send_photo(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
@@ -169,7 +161,6 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------- FLASK + TELEGRAM ----------------
 app = Flask(__name__)
 
-# Build Application in webhook mode (NO Updater/Polling)
 application = Application.builder().token(BOT_TOKEN).updater(None).build()
 
 # Conversation handler
@@ -193,13 +184,13 @@ application.add_handler(
 )
 
 @app.post("/webhook")
-async def webhook():
+def webhook():
     """
     Receives Telegram update and passes to PTB.
-    Application is already initialized at startup.
+    Flask cannot await, so use asyncio.run() here.
     """
     update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.process_update(update)
+    asyncio.run(application.process_update(update))
     return "ok"
 
 @app.get("/")
@@ -209,20 +200,14 @@ def home():
 # ---------------- STARTUP ----------------
 async def init_app():
     global db
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN is missing. Set it in environment variables.")
     db = init_firebase()
     await application.initialize()
-    # Set webhook (drop pending updates on first run if you want)
     await application.bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     logger.info(f"Webhook set to: {WEBHOOK_URL}")
 
 def main():
-    # Initialize PTB + Firebase, then start Flask
     asyncio.run(init_app())
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    app.run(host="0.0.0.0", port=5000)
 
 if __name__ == "__main__":
     main()
-
-
