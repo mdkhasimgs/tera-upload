@@ -4,6 +4,7 @@ import asyncio
 import secrets
 import re
 import os
+import json
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -16,18 +17,33 @@ from telegram.ext import (
 )
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = "8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
-ADMIN_ID = 7598595878
-MAIN_BOT_USERNAME = "TERA_CLOUDBOT"
-UPLOAD_CHANNEL = "@terabo_storessu"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-service.onrender.com")
+# Use environment variables in production. Avoid hardcoding tokens.
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+MAIN_BOT_USERNAME = os.getenv("MAIN_BOT_USERNAME", "TERA_CLOUDBOT")
+UPLOAD_CHANNEL = os.getenv("UPLOAD_CHANNEL", "@terabo_storessu")
+BASE_URL = os.getenv("WEBHOOK_URL", "https://your-service.onrender.com")  # without trailing /webhook
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
-# Firestore
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+# ---------------- FIREBASE INIT ----------------
+def init_firebase():
+    """
+    Prefer FIREBASE_KEY env (JSON string). Fallback to local serviceAccountKey.json.
+    """
+    firebase_key = os.getenv("FIREBASE_KEY")
+    if firebase_key:
+        # Render env var may be multiline or single-line JSON
+        cred_dict = json.loads(firebase_key)
+        cred = credentials.Certificate(cred_dict)
+    else:
+        cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
+    return firestore.client()
 
-# Logging
+db = None  # set in init_app()
+
+# ---------------- LOGGING ----------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("uploader-bot")
 
@@ -42,7 +58,7 @@ def extract_unique_id_from_link(link: str):
 # ---------------- STATES ----------------
 ASK_LINK, ASK_NEW_TITLE = range(2)
 
-# ---------------- COMMAND HANDLERS ----------------
+# ---------------- HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to use this bot.")
@@ -101,27 +117,32 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚫 Cancelled.")
     return ConversationHandler.END
 
-# ---------------- MEDIA HANDLER ----------------
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
+
     file_info, media_type, media_id = {}, None, None
-    title = update.message.caption or "Untitled"
+    title = (update.message.caption or "").strip() or "Untitled"
+
     if update.message.photo:
         media_type, media_id = "photo", update.message.photo[-1].file_id
-        file_info["size"] = update.message.photo[-1].file_size
+        size = getattr(update.message.photo[-1], "file_size", None)
+        if size: file_info["size"] = size
     elif update.message.video:
         v = update.message.video
         media_type, media_id = "video", v.file_id
-        file_info.update(size=v.file_size, duration=v.duration)
-        if v.thumbnail: file_info["thumb_id"] = v.thumbnail.file_id
+        if v.file_size: file_info["size"] = v.file_size
+        if v.duration: file_info["duration"] = v.duration
+        if getattr(v, "thumbnail", None):
+            file_info["thumb_id"] = v.thumbnail.file_id
     elif update.message.document:
         d = update.message.document
         media_type, media_id = "document", d.file_id
-        file_info["size"] = d.file_size
+        if d.file_size: file_info["size"] = d.file_size
     else:
         await update.message.reply_text("⚠️ Unsupported media type.")
         return
+
     unique_id = generate_unique_id()
     db.collection("posts").document(unique_id).set({
         "title": title,
@@ -130,6 +151,8 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "posted_at": datetime.utcnow().isoformat(),
         "views": 0
     })
+
+    # Try to archive to channel (optional)
     try:
         if media_type == "photo":
             await context.bot.send_photo(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
@@ -139,13 +162,17 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_document(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
     except Exception as e:
         logger.warning(f"Archive post failed: {e}")
+
     link = f"https://t.me/{MAIN_BOT_USERNAME}?start={unique_id}"
     await update.message.reply_text(f"✅ Post saved!\n🔗 Link: {link}")
 
 # ---------------- FLASK + TELEGRAM ----------------
 app = Flask(__name__)
-application = Application.builder().token(BOT_TOKEN).build()
 
+# Build Application in webhook mode (NO Updater/Polling)
+application = Application.builder().token(BOT_TOKEN).updater(None).build()
+
+# Conversation handler
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("change_title", change_title_start)],
     states={
@@ -155,23 +182,45 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler("cancel", cancel)],
 )
 
+# Register handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(conv_handler)
-application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
+application.add_handler(
+    MessageHandler(
+        (filters.PHOTO | filters.VIDEO | filters.Document.ALL) & ~filters.COMMAND,
+        handle_media
+    )
+)
 
-@app.route("/webhook", methods=["POST"])
+@app.post("/webhook")
 async def webhook():
+    """
+    Receives Telegram update and passes to PTB.
+    Application is already initialized at startup.
+    """
     update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.initialize()
     await application.process_update(update)
     return "ok"
 
-@app.route("/")
+@app.get("/")
 def home():
     return "Bot is running!"
 
-if __name__ == "__main__":
-    # Set webhook for Telegram
-    asyncio.run(application.bot.set_webhook(WEBHOOK_URL + "/webhook"))
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+# ---------------- STARTUP ----------------
+async def init_app():
+    global db
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is missing. Set it in environment variables.")
+    db = init_firebase()
+    await application.initialize()
+    # Set webhook (drop pending updates on first run if you want)
+    await application.bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    logger.info(f"Webhook set to: {WEBHOOK_URL}")
 
+def main():
+    # Initialize PTB + Firebase, then start Flask
+    asyncio.run(init_app())
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+
+if __name__ == "__main__":
+    main()
