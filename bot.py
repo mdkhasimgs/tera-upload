@@ -18,7 +18,7 @@ from telegram.ext import (
 
 # ---------------- CONFIG ----------------
 # Use environment variables in production. Avoid hardcoding tokens.
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+BOT_TOKEN ="8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 MAIN_BOT_USERNAME = os.getenv("MAIN_BOT_USERNAME", "TERA_CLOUDBOT")
 UPLOAD_CHANNEL = os.getenv("UPLOAD_CHANNEL", "@terabo_storessu")
@@ -224,3 +224,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
