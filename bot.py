@@ -16,8 +16,8 @@ from telegram.ext import (
 )
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+BOT_TOKEN = "8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
+ADMIN_ID = 7598595878
 MAIN_BOT_USERNAME = "TERA_CLOUDBOT"
 UPLOAD_CHANNEL = "@terabo_storessu"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-service.onrender.com")
@@ -174,3 +174,4 @@ if __name__ == "__main__":
     # Set webhook for Telegram
     asyncio.run(application.bot.set_webhook(WEBHOOK_URL + "/webhook"))
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
