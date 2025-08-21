@@ -1,5 +1,5 @@
 python-telegram-bot==20.7
-Flask
-firebase-admin
-python-dotenv
-gunicorn
+Flask==3.0.3
+firebase-admin==6.5.0
+python-dotenv==1.0.1
+gunicorn==22.0.0
