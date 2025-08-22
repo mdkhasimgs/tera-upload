@@ -1,9 +1,9 @@
 # Updated imports for webhook setup
 import logging
 import os
-import asyncio
 import secrets
 import re
+import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
 
@@ -22,18 +22,15 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8132150464:AAG8aQTMKw5NfVsNYAiA39pbJYaT
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7598595878"))
 MAIN_BOT_USERNAME = os.environ.get("MAIN_BOT_USERNAME", "TERA_CLOUDBOT")
 UPLOAD_CHANNEL = os.environ.get("UPLOAD_CHANNEL", "@terabo_storessu")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # This is crucial for Render deployment
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 # Firestore
 # Load credentials from a file or environment variable on Render
-# For Render, you would typically store the service account JSON in a variable.
 try:
     cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
 except Exception:
     logger.error("Could not load serviceAccountKey.json. Check your deployment environment.")
-    # Fallback for deployment if the file isn't present
-    # This part would need to be customized for your specific setup
     pass
 
 db = firestore.client()
@@ -188,49 +185,36 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = f"https://t.me/{MAIN_BOT_USERNAME}?start={unique_id}"
     await update.message.reply_text(f"✅ Post saved!\n🔗 Link: {link}")
 
-# ---------------- WEB SERVER (for webhooks) ----------------
-app = Flask(__name__)
-application = Application.builder().token(BOT_TOKEN).build()
+# ---------------- MAIN ----------------
+def main():
+    """Start the bot."""
+    application = Application.builder().token(BOT_TOKEN).build()
 
-# Register your handlers here
-application.add_handler(CommandHandler("start", start))
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("change_title", change_title_start)],
-    states={
-        ASK_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_link)],
-        ASK_NEW_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_title)]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    name="change_title_conv",
-    persistent=False
-)
-application.add_handler(conv_handler)
-application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
+    application.add_handler(CommandHandler("start", start))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("change_title", change_title_start)],
+        states={
+            ASK_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_link)],
+            ASK_NEW_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_title)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        name="change_title_conv",
+        persistent=False
+    )
+    application.add_handler(conv_handler)
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
 
-@app.route("/", methods=["POST"])
-async def telegram_webhook():
-    """Endpoint for Telegram to send updates."""
-    await application.process_update(Update.de_json(request.get_json(force=True), application.bot))
-    return jsonify({"status": "ok"})
+    # Get the port from the environment variable provided by Render
+    port = int(os.environ.get("PORT", "8080"))
 
-@app.route("/set_webhook")
-def set_webhook_route():
-    """Route to manually set the webhook URL."""
-    if not WEBHOOK_URL:
-        return "WEBHOOK_URL environment variable is not set. Please configure it on Render.", 400
-    
-    logger.info(f"Setting webhook to {WEBHOOK_URL}")
-    try:
-        # A new event loop is required for async calls in this context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        webhook_info = loop.run_until_complete(application.bot.set_webhook(url=WEBHOOK_URL))
-        return f"Webhook set successfully: {webhook_info}", 200
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-        return f"Failed to set webhook: {e}", 500
+    # This is the crucial part for Render
+    # Tell the application to start a web server for webhooks
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path="",
+        webhook_url=f"https://{WEBHOOK_URL}/"
+    )
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    main()
