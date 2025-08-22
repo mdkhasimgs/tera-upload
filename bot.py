@@ -5,7 +5,8 @@ import secrets
 import re
 import threading
 from datetime import datetime
-from flask import Flask, request, jsonify
+# Removed Flask imports as it's no longer needed for the webhook server
+# from flask import Flask, request, jsonify
 
 import firebase_admin
 from firebase_admin import credentials, firestore
