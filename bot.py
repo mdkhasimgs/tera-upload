@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = "8132150464:AAF0Naje8taoTIhDFwxUoTawIGWprpZsrts"
+BOT_TOKEN = "8132150464:AAG8aQTMKw5NfVsNYAiA39pbJYaTRMBmQ40"
 ADMIN_ID = 7598595878
 MAIN_BOT_USERNAME = "TERA_CLOUDBOT"
 UPLOAD_CHANNEL = "@terabo_storessu"
