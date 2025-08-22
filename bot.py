@@ -11,8 +11,8 @@ from firebase_admin import credentials, firestore
 
 from telegram import Update
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    ConversationHandler, ContextTypes, filters
+    Updater, CommandHandler, MessageHandler,
+    Filters, ConversationHandler, CallbackContext
 )
 
 # ---------------- CONFIG ----------------
@@ -42,30 +42,30 @@ def extract_unique_id_from_link(link: str):
 ASK_LINK, ASK_NEW_TITLE = range(2)
 
 # ---------------- COMMAND HANDLERS ----------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ You are not authorized to use this bot.")
+        update.message.reply_text("❌ You are not authorized to use this bot.")
         return
-    await update.message.reply_text(
+    update.message.reply_text(
         "👋 Send me photos/videos/documents one by one.\n"
         "Each file will get its own link via the Main Bot."
     )
 
 # ---------------- CHANGE TITLE ----------------
-async def change_title_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def change_title_start(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
+        update.message.reply_text("❌ You are not authorized to use this command.")
         return ConversationHandler.END
 
-    await update.message.reply_text("🔗 Please send the generated link (from the main bot) whose title you want to change:")
+    update.message.reply_text("🔗 Please send the generated link (from the main bot) whose title you want to change:")
     return ASK_LINK
 
-async def receive_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def receive_link(update: Update, context: CallbackContext):
     link = update.message.text.strip()
     unique_id = extract_unique_id_from_link(link)
 
     if not unique_id:
-        await update.message.reply_text(
+        update.message.reply_text(
             "❌ Invalid link format. Please send a valid link like:\n"
             f"https://t.me/{MAIN_BOT_USERNAME}?start=<id>"
         )
@@ -74,7 +74,7 @@ async def receive_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc_ref = db.collection("posts").document(unique_id)
     doc = doc_ref.get()
     if not doc.exists:
-        await update.message.reply_text("❌ No post found for this link.")
+        update.message.reply_text("❌ No post found for this link.")
         return ConversationHandler.END
 
     # Store doc_ref for next step
@@ -82,40 +82,40 @@ async def receive_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["unique_id"] = unique_id
 
     current_title = doc.to_dict().get("title", "Untitled")
-    await update.message.reply_text(
+    update.message.reply_text(
         f"📌 Current Title: {current_title}\n\n"
         "✏️ Please send the new title you want to set:"
     )
     return ASK_NEW_TITLE
 
-async def receive_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def receive_new_title(update: Update, context: CallbackContext):
     new_title = update.message.text.strip()
     doc_ref = context.user_data.get("doc_ref")
 
     if not doc_ref:
-        await update.message.reply_text("❌ Session expired. Please start again.")
+        update.message.reply_text("❌ Session expired. Please start again.")
         return ConversationHandler.END
 
     try:
         doc_ref.update({"title": new_title})
         unique_id = context.user_data.get("unique_id")
-        await update.message.reply_text(
+        update.message.reply_text(
             f"✅ Title updated successfully!\n\n"
             f"🔗 Link: https://t.me/{MAIN_BOT_USERNAME}?start={unique_id}\n"
             f"🆕 New Title: {new_title}"
         )
     except Exception as e:
         logger.error(f"Error updating title: {e}")
-        await update.message.reply_text("❌ Failed to update title. Try again later.")
+        update.message.reply_text("❌ Failed to update title. Try again later.")
 
     return ConversationHandler.END
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚫 Title change process cancelled.")
+def cancel(update: Update, context: CallbackContext):
+    update.message.reply_text("🚫 Title change process cancelled.")
     return ConversationHandler.END
 
 # ---------------- MEDIA UPLOAD ----------------
-async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_media(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return
 
@@ -146,7 +146,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_info["size"] = d.file_size
 
     else:
-        await update.message.reply_text("⚠️ Unsupported media type.")
+        update.message.reply_text("⚠️ Unsupported media type.")
         return
 
     unique_id = generate_unique_id()
@@ -160,16 +160,16 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if media_type == "photo":
-            await context.bot.send_photo(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
+            context.bot.send_photo(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
         elif media_type == "video":
-            await context.bot.send_video(UPLOAD_CHANNEL, media_id, caption=title, supports_streaming=True, protect_content=True)
+            context.bot.send_video(UPLOAD_CHANNEL, media_id, caption=title, supports_streaming=True, protect_content=True)
         elif media_type == "document":
-            await context.bot.send_document(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
+            context.bot.send_document(UPLOAD_CHANNEL, media_id, caption=title, protect_content=True)
     except Exception as e:
         logger.warning(f"Archive post failed: {e}")
 
     link = f"https://t.me/{MAIN_BOT_USERNAME}?start={unique_id}"
-    await update.message.reply_text(f"✅ Post saved!\n🔗 Link: {link}")
+    update.message.reply_text(f"✅ Post saved!\n🔗 Link: {link}")
 
 # ---------------- WEB SERVER (for UptimeRobot) ----------------
 app = Flask('')
@@ -189,24 +189,26 @@ def keep_alive():
 def main():
     keep_alive()  # Start web server so UptimeRobot can ping
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("change_title", change_title_start)],
         states={
-            ASK_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_link)],
-            ASK_NEW_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_title)]
+            ASK_LINK: [MessageHandler(Filters.text & ~Filters.command, receive_link)],
+            ASK_NEW_TITLE: [MessageHandler(Filters.text & ~Filters.command, receive_new_title)]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         name="change_title_conv",
         persistent=False
     )
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(conv_handler)
+    dp.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_media))
 
-    application.run_polling()
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     try:
