@@ -22,7 +22,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8132150464:AAG8aQTMKw5NfVsNYAiA39pbJYaT
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7598595878"))
 MAIN_BOT_USERNAME = os.environ.get("MAIN_BOT_USERNAME", "TERA_CLOUDBOT")
 UPLOAD_CHANNEL = os.environ.get("UPLOAD_CHANNEL", "@terabo_storessu")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URl", "https://tera-upload.onrender.com") # This is crucial for Render deployment
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # This is crucial for Render deployment
 
 # Firestore
 # Load credentials from a file or environment variable on Render
