@@ -2,9 +2,9 @@ services:
   - type: web
     name: telegram-bot
     env: python
+    plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python bot.py"
-    plan: free
     envVars:
       - key: BOT_TOKEN
         sync: false
@@ -14,3 +14,4 @@ services:
         sync: false
       - key: UPLOAD_CHANNEL
         sync: false
+    pythonVersion: 3.11
